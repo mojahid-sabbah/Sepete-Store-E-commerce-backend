@@ -1,0 +1,67 @@
+  const { id } = req.params;
+        const product = await productModel.findById(id);
+
+        if (!product) {
+            return res.status(400).json({ message: ' product not exist' })
+        }
+        const { name, amount, desc , price, discount, categoryId, subcategoryId, brandId } = req.body;
+        if (name) {
+            req.body.slug = slugify(name)
+        }
+        if (amount) {
+            let calcstock = amount - product.soldItems;
+
+            if (calcstock > 0) {
+                req.body.stock = calcstock;
+            } else {
+                req.body.stock = 0
+            }
+        }
+        if (price && discount) {
+            req.body.finalPrice = (price - (price * (parseInt(discount) / 100)))
+        } else if (price) {
+            req.body.finalPrice = (price - (price * (parseInt(product.discount) / 100)))
+        } else if (discount) {
+            req.body.finalPrice = (product.price - (product.price * (parseInt(discount) / 100)))
+        }
+
+        if (categoryId && subcategoryId) {
+
+            const subcategory = await subcategoryModel.findOne({ _id: subcategoryId, categoryId })
+            if (!subcategory) {
+                return res.status(400).json({ message: ' invalid category or subcategory' })
+            }
+        }
+        if (brandId) {
+            const brand = await brandModel.findById({ _id: brandId })
+            if (!brand) {
+                return res.status(400).json({ message: ' invalid  brand' })
+            }
+
+            //return res.status(400).json('categoryId')
+            if (req.files.length) {
+
+                let images = [];
+                let imagePublicId = [];
+                for (const file of req.files) {  //                                   (file) item from for loop
+                    const { secure_url, public_id } = await cloudinary.uploader.upload(file.path, { folder: `Ecommerce/product/${name}` })
+                    images.push(secure_url);
+                    imagePublicId.push(public_id);
+                }
+                // here to add to DB
+                req.body.images = images;
+                req.body.imagePublicId = imagePublicId;
+            }
+
+            const updatedProduct = await productModel.findOneAndUpdate({ _id: product._id }, req.body, { new: false })
+            if (updatedProduct) {
+                for (const imageid of product.imagePublicId) {
+                    await cloudinary.uploader.destroy(imageid)
+                }
+                return res.status(200).json({ message: 'updated successfuly ', updatedProduct })
+
+            } else {
+                return res.status(401).json({ message: 'fail to update product ' })
+
+            }
+        }
